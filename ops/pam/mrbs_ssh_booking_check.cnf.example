@@ -1,0 +1,8 @@
+# Copy to /etc/security/mrbs-pam.cnf and chmod 600.
+# This file is read by mysql client via --defaults-extra-file.
+
+[client]
+host=127.0.0.1
+port=3306
+user=mrbs_ro
+password=CHANGE_ME
