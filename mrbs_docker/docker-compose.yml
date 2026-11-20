@@ -1,8 +1,10 @@
 services:
     www:
+        container_name: mrbs-www
+        image: mrbs-www:latest
         build:
             context: ..
-            dockerfile: docker_app/php/Dockerfile
+            dockerfile: mrbs_docker/php/Dockerfile
         ports:
             - "8080:80"
         command: apache2ctl -D FOREGROUND
@@ -14,6 +16,7 @@ services:
         networks:
             - default
     db:
+        container_name: mrbs-db
         image: mysql:8.4
         ports:
             - "3306:3306"
@@ -29,6 +32,7 @@ services:
         networks:
             - default
     phpmyadmin:
+        container_name: mrbs-phpmyadmin
         image: phpmyadmin
         links:
             - db:db
