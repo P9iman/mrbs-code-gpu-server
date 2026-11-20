@@ -57,11 +57,13 @@ $id = get_form_var('id', 'int');
 $password0 = get_form_var('password0', 'string', null, INPUT_POST);
 $password1 = get_form_var('password1', 'string', null, INPUT_POST);
 $invalid_email = get_form_var('invalid_email', 'int');
+$email_not_unique = get_form_var('email_not_unique', 'int');
 $name_empty = get_form_var('name_empty', 'int');
 $name_not_unique = get_form_var('name_not_unique', 'int');
 $taken_name = get_form_var('taken_name', 'string');
-$pwd_not_match = get_form_var('pwd_not_match', 'string');
-$pwd_invalid = get_form_var('pwd_invalid', 'string');
+$pwd_not_match = get_form_var(auth()::PWD_NOT_MATCH, 'string');
+$pwd_not_unique = get_form_var(auth()::PWD_NOT_UNIQUE, 'int');
+$pwd_invalid = get_form_var(auth()::PWD_INVALID, 'string');
 $invalid_dates = get_form_var('invalid_dates', 'array');
 $datatable = get_form_var('datatable', 'int');  // Will only be set if we're using DataTables
 $back_button = get_form_var('back_button', 'string');
@@ -752,6 +754,10 @@ if (isset($action) && ( ($action == "edit") or ($action == "add") ))
   {
     echo "<p class=\"error\">" . get_vocab('invalid_email') . "</p>\n";
   }
+  if (!empty($email_not_unique))
+  {
+    echo "<p class=\"error\">" . get_vocab('email_not_unique') . "</p>\n";
+  }
   if (!empty($name_not_unique))
   {
     echo "<p class=\"error\">'" . escape_html($taken_name) . "' " . get_vocab('name_not_unique') . "<p>\n";
@@ -772,6 +778,10 @@ if (isset($action) && ( ($action == "edit") or ($action == "add") ))
   if (!empty($pwd_not_match))
   {
     echo "<p class=\"error\">" . get_vocab("passwords_not_eq") . "</p>\n";
+  }
+  if (!empty($pwd_not_unique))
+  {
+    echo "<p class=\"error\">" . get_vocab("password_not_unique") . "</p>\n";
   }
   if (!empty($pwd_invalid))
   {
@@ -988,14 +998,13 @@ if (isset($action) && ($action == "update"))
         $values[$fieldname] = mb_strtolower($values[$fieldname]);
         break;
       case 'password_hash':
-        // password: if the password field is blank it means
-        // that the user doesn't want to change the password
-        // so don't do anything; otherwise calculate the hash.
-        // Note: we don't put the password in the query string
-        // for security reasons.
-        if ($password0 !== '')
+        // Password: if it's an existing user and the password field is blank, it means
+        // that the user doesn't want to change the password so don't do anything; otherwise
+        // calculate the hash.
+        // Note: we don't put the password in the query string for security reasons.
+        if (!isset($id) || (isset($password0) && ($password0 !== '')))
         {
-          $values[$fieldname] = password_hash($password0, PASSWORD_DEFAULT);
+          $values[$fieldname] = password_hash($password0 ?? '', PASSWORD_DEFAULT);
         }
         break;
       case 'level':
@@ -1064,30 +1073,28 @@ if (isset($action) && ($action == "update"))
         }
         break;
       case 'password_hash':
-        // check that the two passwords match
-        if ($password0 != $password1)
+        // Note: there will only be a password_hash field if it's a new user, or the password0 field is not empty.
+        if (true !== ($error = auth()->validatePasswords([$password0, $password1], $values['name'], $values['email'])))
         {
           $valid_data = false;
-          $q_string .= "&pwd_not_match=1";
-        }
-        // check that the password conforms to the password policy
-        // if it's a new user, or else if it's an existing user
-        // trying to change their password
-        if (!isset($id) || (isset($password0) && ($password0 !== '')))
-        {
-          if (!auth()->validatePassword($password0))
-          {
-            $valid_data = false;
-            $q_string .= "&pwd_invalid=1";
-          }
+          $q_string .= "&$error=1";
         }
         break;
       case 'email':
-        // check that the email address is valid
-        if (isset($value) && ($value !== '') && !validate_email_list($value))
+        if (isset($value) && ($value !== ''))
         {
-          $valid_data = false;
-          $q_string .= "&invalid_email=1";
+          // Check that the email address is valid
+          if (!validate_email_list($value))
+          {
+            $valid_data = false;
+            $q_string .= "&invalid_email=1";
+          }
+          // .. and, if required, unique
+          if (!empty($auth['db']['unique_email']) && !auth()->isUniqueEmail($value, $id ?? null))
+          {
+            $valid_data = false;
+            $q_string .= "&email_not_unique=1";
+          }
         }
         break;
     }

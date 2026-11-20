@@ -61,15 +61,6 @@ function create_details_body(array $data, bool $as_html=false, bool $keep_privat
   global $select_options, $booking_types;
   global $edit_entry_field_order;
 
-  // Get the duration if we haven't got it already
-  if (!isset($data['duration']))
-  {
-    // We will translate the units later
-    $d = get_duration($data['start_time'], $data['end_time'], $enable_periods, $data['area_id'], false);
-    $data['duration'] = $d['duration'];
-    $data['dur_units'] = $d['dur_units'];
-  }
-
   // Go through each of the columns and for each of them that can be made private
   // substitute the private text if the user is not allowed to see the data
   $private_text = get_vocab("unavailable");
@@ -249,7 +240,11 @@ function create_details_body(array $data, bool $as_html=false, bool $keep_privat
         $start_date = date_string($enable_periods, $data['start_time'], $data['area_id']);
         $tbody .= create_details_row(get_vocab("start_date"), $start_date, $as_html);
         // Duration
-        $tbody .= create_details_row(get_vocab("duration"), $data['duration'] . " " . get_vocab($data['dur_units']), $as_html);
+        $tbody .= create_details_row(
+          get_vocab('duration'),
+          get_duration_string($data['start_time'], $data['end_time'], $data['area_id']),
+          $as_html
+        );
         break;
 
       case 'end_time':

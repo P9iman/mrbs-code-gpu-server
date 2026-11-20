@@ -21,11 +21,51 @@ use function MRBS\url_base;
 
 class AuthDb extends AuthDbAbstract
 {
+  public const PWD_INVALID = 'pwd_invalid';
+  public const PWD_NOT_MATCH = 'pwd_not_match';
+  public const PWD_NOT_UNIQUE = 'pwd_not_unique';
+
+
   public function __construct()
   {
     $this->db_table = _tbl('users');
     $this->column_name_username = 'name';
     $this->column_name_display_name = 'display_name';
+  }
+
+
+  /**
+   * Validate the passwords entered by the user on a form.
+   *
+   * @param array $passwords An array of two passwords, which should be the same.
+   * @param string $username
+   * @param string|null $email
+   * @return string|true
+   */
+  public function validatePasswords(array $passwords, string $username, ?string $email)
+  {
+    // Check that the two passwords match.
+    if ($passwords[0] !== $passwords[1])
+    {
+      return self::PWD_NOT_MATCH;
+    }
+
+    // Check that the password conforms to the password policy.
+    if (!$this->checkPasswordConformsToPolicy($passwords[0]))
+    {
+      return self::PWD_INVALID;
+    }
+
+    // Check that the password hasn't already been used by another user with the
+    // same email address, because, if it has, we won't be able to distinguish
+    // between them when they log in using an email address.
+    if (isset($email) && ($email !== '') &&
+        !empty(array_diff($this->validateEmail($email, $passwords[0]), [$username])))
+    {
+      return self::PWD_NOT_UNIQUE;
+    }
+
+    return true;
   }
 
 
@@ -122,23 +162,18 @@ class AuthDb extends AuthDbAbstract
   }
 
 
-  /* authValidateEmail($email, $pass)
+  /**
+   * Check if the specified email/password pair are valid
    *
-   * Checks if the specified email/password pair are valid
-   *
-   * $email - The email address
-   * $pass  - The password
-   *
-   * Returns:
-   *   array    - An array of valid usernames, empty if none found
+   * @return array An array of valid usernames, empty if none found
    */
-  private function validateEmail(
+  public function validateEmail(
     #[\SensitiveParameter]
     string $email,
     #[\SensitiveParameter]
     string $pass) : array
   {
-    $valid_usernames = array();
+    $valid_usernames = [];
 
     // Email addresses are not unique in the users table, so we need to find all of them.
     $users = self::getUsersByEmail($email);
@@ -231,7 +266,8 @@ class AuthDb extends AuthDbAbstract
    */
   public function canResetPassword() : bool
   {
-    return true;
+    // Reset emails can only be sent if $url_base is set, so hide the feature otherwise
+    return (self::getTrustedResetBase() !== null);
   }
 
 
@@ -522,6 +558,29 @@ class AuthDb extends AuthDbAbstract
   }
 
 
+  /**
+   * Returns the base URL from `$url_base`, or null if it isn't set to a full URL.
+   * It deliberately doesn't fall back to HTTP_HOST or any other server variable.
+   */
+  private static function getTrustedResetBase() : ?string
+  {
+    global $url_base;
+
+    if (isset($url_base) && is_string($url_base) && ($url_base !== ''))
+    {
+      $parsed = parse_url($url_base);
+      if (($parsed !== false) && !empty($parsed['scheme']) && !empty($parsed['host']))
+      {
+        // With a scheme and host, url_base() uses only $url_base
+        return url_base();
+      }
+    }
+
+    trigger_error('No trusted base available: $url_base must be set to a full URL (with scheme and host).', E_USER_WARNING);
+    return null;
+  }
+
+
   private function notifyUser(array $users, string $key) : bool
   {
     global $auth, $mail_settings;
@@ -575,7 +634,14 @@ class AuthDb extends AuthDbAbstract
         'key'       => $key
       );
     $query = http_build_query($vars, '', '&');
-    $href = url_base() . multisite("reset_password.php?$query");
+    // The link is emailed, so it must not be built from request headers or
+    // server variables, which a client can control.  Only $url_base is used.
+    $base = self::getTrustedResetBase();
+    if ($base === null)
+    {
+      return false;
+    }
+    $href = $base . multisite("reset_password.php?$query");
     $body .= "<p><a href=\"$href\">" . get_vocab('reset_password') . "</a>.</p>";
 
     MailQueue::add(
@@ -697,10 +763,45 @@ class AuthDb extends AuthDbAbstract
   }
 
 
-  // Returns an array of rows for all users with the email address $email.
-  // Assumes that email addresses are case insensitive.
-  // Allows equivalent Gmail addresses, ie ignores dots in the local part and
-  // treats gmail.com and googlemail.com as equivalent domains.
+  /**
+   * Check whether an email address is unique.
+   *
+   * Assumes that email addresses are case-insensitive.  Allows equivalent Gmail addresses, ie ignores
+   * dots in the local part and treats gmail.com and googlemail.com as equivalent domains.
+   *
+   * @param string|null $ignore_id If this is set then ignore users with this id
+   * @return bool
+   */
+  public function isUniqueEmail(string $email, ?int $ignore_id) : bool
+  {
+    $users = $this->getUsersByEmail($email);
+
+    // No users with this email address: must be unique
+    if (0 === ($n_users = count($users)))
+    {
+      return true;
+    }
+
+    // More than one user with this email address, or only one and we are
+    // not ignoring any ids: can't be unique
+    if (($n_users > 1) || !isset($ignore_id))
+    {
+      return false;
+    }
+
+    // Only one user: if it's this one, then it's unique.
+    return ($users[0]['id'] == $ignore_id);
+  }
+
+
+  /**
+   * Find all users by email address.
+   *
+   * Assumes that email addresses are case-insensitive.  Allows equivalent Gmail addresses, ie ignores
+   * dots in the local part and treats gmail.com and googlemail.com as equivalent domains.
+   *
+   * @return array An array of rows for all users with the email address `$email`.
+   */
   private function getUsersByEmail(string $email) : array
   {
     global $auth;
@@ -738,9 +839,8 @@ class AuthDb extends AuthDbAbstract
       elseif (in_array(mb_strtolower($address['domain']), array('gmail.com', 'googlemail.com')))
       {
         $sql_params = array(str_replace('.', '', $address['local']));
-        $sql_params[] = $sql_params[0];
-        $condition = "(LOWER(?) = REPLACE(TRIM(TRAILING '@gmail.com' FROM LOWER(email)), '.', '')) OR " .
-                     "(LOWER(?) = REPLACE(TRIM(TRAILING '@googlemail.com' FROM LOWER(email)), '.', ''))";
+        // Use REGEXP_REPLACE instead of TRIM because TRIM behaves differently in MySQL and PostgreSQL
+        $condition = "LOWER(?) = REPLACE(REGEXP_REPLACE(LOWER(email), '@(gmail|googlemail)\.com$', ''), '.', '')";
       }
       // Everything else: check the complete email address
       else

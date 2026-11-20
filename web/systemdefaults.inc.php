@@ -27,6 +27,12 @@ require_once 'lib/autoload.inc';
 // information (eg database usernames and passwords).
 $debug = false;
 
+// Setting this to true will cause the opcode cache to be reset when in debug mode
+// and scripts to be reloaded and reparsed the next time they are hit.  This will
+// make compile-time errors more obvious, but can cause problems on some systems (see,
+// for example, https://github.com/meeting-room-booking-system/mrbs-code/issues/4037).
+$debug_opcache_reset = false;
+
 
 /*********
  * Logging
@@ -219,12 +225,14 @@ $mrbs_company = "Your Company";   // This line must always be uncommented ($mrbs
 //$mrbs_company_more_info = "You can put additional information here";  // e.g. "XYZ Department"
 
 // Uncomment this next line to have a link to your organisation in the header
-//$mrbs_company_url = "http://www.your_organisation.com/";
+//$mrbs_company_url = "https://www.your_organisation.com/";
 
 // This is to fix URL problems when using a proxy in the environment.
 // If links inside MRBS or in email notifications appear broken, then specify here the URL of
 // your MRBS root directory, as seen by the users. For example:
-// $url_base =  "http://example.com/mrbs";
+// $url_base =  "https://example.com/mrbs";
+// Password reset emails are only sent if $url_base is set to a full URL (with scheme and host),
+// because the reset link is never built from request headers.
 
 
 /*******************
@@ -836,7 +844,7 @@ $datetime_formats['week_number'] = array(
 // Sometimes if the server's ICU library is out of date and cannot easily be updated
 // it can be better to use the IntlDateFormatter emulation and strftime(), even if the
 // 'intl' extension is installed.  To do this set the variable below to true.
-$force_srtftime = false;
+$force_strftime = false;
 
 
 /***************
@@ -1131,6 +1139,15 @@ $auth["session_cookie"]["hash_algorithm"] = 'sha512';
 
 // Configuration parameters for 'php' session scheme
 
+// By default MRBS's PHP session scheme uses a custom session handler that encrypts and stores session data in the
+// database. This
+//   (a) is more secure, especially on shared servers;
+//   (b) avoids problems with ordinary sessions not working because the PHP session save directory is not writable; and
+//   (c) is more resilient in clustered environments.
+// However, there may be circumstances where it is preferable to use the the internal PHP session handler, in which
+// case set this to true.  Note that the session data is not encrypted when using the internal PHP handler.
+$auth['session_php']['use_internal_php_handler'] = false;
+
 // The session name
 // Unset this in your config file if you want to use the default session name
 $auth["session_php"]["session_name"] = 'MRBS_SESSID';
@@ -1210,6 +1227,9 @@ $auth["realm"]  = "mrbs";
 //$auth['remote_user']['login_link'] = '/login/link.html';
 //$auth['remote_user']['logout_link'] = '/logout/link.html';
 
+// 'auth_auth_basic' configuration settings
+$auth["auth_basic"]["passwd_file"] = "/etc/httpd/htpasswd"; // Location of the password file
+
 // 'auth_ext' configuration settings
 $auth["prog"]   = "";
 $auth["params"] = "";
@@ -1283,6 +1303,8 @@ $auth['db']['reset_key_expiry'] = 60*60*24; // seconds
 // This will stop their associated information such as display name and email
 // address from being lost.
 $auth['db']['prevent_deletion_of_users_in_bookings'] = false;
+// Set this to TRUE to force email addresses to be unique.
+$auth['db']['unique_email'] = false;
 
 
 // 'auth_db_ext' configuration settings

@@ -729,7 +729,7 @@ function mrbsCheckPolicy(array $booking, ?int $ignore_entry_id=null, ?int $ignor
         if ($booking['end_time'] > $max_endtime)
         {
           $tag = (empty($exempt_types['max_duration_periods'])) ? 'max_booking_duration' : 'max_booking_duration_type';
-          $units = ($max_duration_periods > 1) ? get_vocab("periods") : get_vocab("period_lc");
+          $units = ($max_duration_periods > 1) ? get_vocab("periods") : get_vocab("period");
           $violations[] = get_vocab($tag, $max_duration_periods, $units, get_type_vocab($booking['type']));
         }
       }
@@ -1177,6 +1177,7 @@ function get_entries_n_outstanding(User $user) : int
   // for which this user is a booking admin.
   while (false !== ($row = $res->next_row_keyed()))
   {
+    row_cast_columns($row, 'entry');
     if ((compare_usernames($row['create_by'], $user->username) === 0) || is_book_admin($row['room_id']))
     {
       $result++;
@@ -1765,6 +1766,8 @@ function mrbsApproveEntry($id, $series)
 
   if (($start_times !== FALSE) && (count($start_times) != 0))
   {
+    // Not all database drivers will have returned an array of ints
+    $start_times = array_map('intval', $start_times);
     $sql = "UPDATE " . _tbl('entry') . "
                SET status=status&(~" . STATUS_AWAITING_APPROVAL . "),
                    ical_sequence=ical_sequence+1
@@ -2062,12 +2065,6 @@ function get_booking_info(int $id, bool $series, bool $silent=false)
       $row['end_time'] = $end_last_period->getTimestamp();
     }
   }
-
-  // Now get the duration.
-  // Don't translate the units at this stage.   We'll translate them later.
-  $d = get_duration($row['start_time'], $row['end_time'], $row['enable_periods'], $row['area_id'], false);
-  $row['duration'] = $d['duration'];
-  $row['dur_units'] = $d['dur_units'];
 
   // Translate the status field into a set of booleans
   unpack_status($row);
@@ -2631,19 +2628,6 @@ function mrbsMakeBookings(array $bookings, ?int $id=null, bool $just_check=false
   // 1200 one day to 1200 the next, crossing a DST boundary.
   $duration_seconds = $common['end_time'] - $common['start_time'];
   $duration_seconds -= cross_dst($common['start_time'], $common['end_time']);
-  // Now get the duration, which will be needed for email notifications
-  // (We do this before we adjust for DST so that the user sees what they expect to see)
-  $duration = $duration_seconds;
-  $date = getdate($common['start_time']);
-  if ($enable_periods)
-  {
-    $period = (($date['hours'] - 12) * 60) + $date['minutes'];
-    toPeriodString($period, $duration, $dur_units, FALSE);
-  }
-  else
-  {
-    toTimeString($duration, $dur_units, FALSE);
-  }
 
   // Expand a series into a list of start times:
   if ($bookings[0]['repeat_rule']->getType() != RepeatRule::NONE)
@@ -2913,9 +2897,6 @@ function mrbsMakeBookings(array $bookings, ?int $id=null, bool $just_check=false
     {
       $booking['skip_list'] = $skip_lists[$booking['room_id']];
     }
-    // The following elements are needed for email notifications
-    $booking['duration'] = $duration;
-    $booking['dur_units'] = $dur_units;
 
     if ($booking['repeat_rule']->getType() != RepeatRule::NONE)
     {
@@ -2955,14 +2936,16 @@ function mrbsMakeBookings(array $bookings, ?int $id=null, bool $just_check=false
       {
         require_once "functions_mail.inc";
 
-        // Get room name and area name for email notifications.
-        $sql = "SELECT R.room_name, A.area_name
+        // Get room name and area id and name for email notifications.
+        $sql = "SELECT R.room_name, R.area_id, A.area_name
                   FROM " . _tbl('room') . " R, " . _tbl('area') . " A
                  WHERE R.id=? AND R.area_id = A.id
                  LIMIT 1";
         $res = db()->query($sql, array($booking['room_id']));
         $row = $res->next_row_keyed();
+        row_cast_columns($row, 'room');
         $booking['room_name'] = $row['room_name'];
+        $booking['area_id'] = $row['area_id'];
         $booking['area_name'] = $row['area_name'];
 
         // If this is a modified entry then get the previous entry data

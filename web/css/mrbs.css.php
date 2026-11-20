@@ -387,7 +387,7 @@ label:empty::after, .group label::after {
 
 label.no_suffix::after,
 [lang="fr"] label.no_suffix::after,
-.dataTables_wrapper label::after,
+.dt-container label::after,
 .list td.no_suffix:first-child::after {
   content: '';
 }
@@ -2042,6 +2042,7 @@ form#add_new_user {
   align-items: stretch;
   justify-content: flex-end;
   padding: 0.3em 0;
+  min-width: 0;
 }
 
 .banner nav.container > nav > nav {
@@ -2113,6 +2114,7 @@ nav.logon input:hover {
 #form_nav {
   padding-right: 1rem;
   margin-right: 1rem;
+  min-width: 0;
 }
 
 input.link[type="submit"] {
@@ -2682,13 +2684,36 @@ div.ColVis_collection button.ColVis_Button {
   clear: left;
 }
 
-.dataTables_wrapper .dataTables_length {
+.dt-container .clear {
   clear: both;
 }
 
-.dataTables_wrapper .dataTables_filter {
-  clear: right;
-  margin-bottom: 1em;
+.dt-container .dt-length,
+.dt-container .dt-info,
+.dt-container .dt-search,
+.dt-container .dt-paging {
+  position: relative;
+  z-index: 100;
+}
+
+.dt-container .dt-length,
+.dt-container .dt-info {
+  float: left;
+}
+
+.dt-container .dt-search,
+.dt-container .dt-paging {
+  float: right;
+}
+
+.dt-container .dt-length,
+.dt-container .dt-search {
+  margin: 0.25em 0 0.5em 0;
+}
+
+.dt-container .dt-info,
+.dt-container .dt-paging {
+  margin: 0.5em 0 0.25em 0;
 }
 
 span.ColVis_radio {
@@ -2741,7 +2766,7 @@ table.dataTable.order-column.stripe tbody tr.even > .sorting_3 {
   background-color: #F9F9FF;
 }
 
-.dataTables_wrapper.no-footer .dataTables_scrollBody {
+.dt-container.no-footer .dataTables_scrollBody {
   border-bottom-width: 0;
 }
 

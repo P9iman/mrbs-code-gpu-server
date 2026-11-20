@@ -13,41 +13,39 @@ http_headers(array("Content-type: application/x-javascript"),
 
 'use strict';
 
-var refreshListenerAdded = false;
-
-var intervalId;
+let refreshListenerAdded = false;
 
 <?php
 // If the table container is scrollable, then scroll so that the current time is visible.
 ?>
 function scrollToCurrentSlot() {
-  var table = $('.dwm_main');
-  var timelineVertical = table.find('thead').data('timeline-vertical');
-  var container = table.parent();
-  var scrollTo, scrollable;
-
-  scrollable = (timelineVertical) ? container.isHScrollable() : container.isVScrollable();
+  const table = $('.dwm_main');
+  const timelineVertical = table.find('thead').data('timeline-vertical');
+  const container = table.parent();
+  const scrollable = (timelineVertical) ? container.isHScrollable() : container.isVScrollable();
 
   if (scrollable)
   {
-    var slots = table.find('thead').data('slots');
-    var nowSlotIndices = Timeline.search(slots);
+    let scrollTo;
+    let index = 0;
+    const slots = table.find('thead').data('slots');
+    const nowSlotIndices = Timeline.search(slots);
     if (nowSlotIndices.length > 1)
     {
       <?php // Show the row/column just before the current slot ?>
-      var index = Math.max(0, nowSlotIndices[0] - 1);
+      index = Math.max(0, nowSlotIndices[0] - 1);
     }
     if (index > 0) <?php // No point in scrolling to where we already are ?>
     {
       if (timelineVertical)
       {
-        var cols = table.find('thead th:not(.first_last)');
+        const cols = table.find('thead th:not(.first_last)');
         scrollTo = cols.eq(index).offset().left - cols.eq(0).offset().left;
         container.scrollLeft(scrollTo);
       }
       else
       {
-        var rows = table.find('tbody tr');
+        const rows = table.find('tbody tr');
         scrollTo = rows.eq(index).offset().top - rows.eq(0).offset().top;
         container.scrollTop(scrollTo);
       }
@@ -61,138 +59,127 @@ function scrollToCurrentSlot() {
 // "default-src 'self'" or "script-src 'self'".  And we can't use a CSS file because we don't
 // know how many columns there are.  So we have to use JavaScript.
 ?>
-var sizeColumns = function() {
-    var mainCols = $('.dwm_main thead tr:first-child th:visible').not('th.first_last, th.hidden_day');
-    mainCols.css('width', 100/mainCols.length + '%');
-  };
+const sizeColumns = function () {
+  const mainCols = $('.dwm_main thead tr:first-child th:visible').not('th.first_last, th.hidden_day');
+  mainCols.css('width', 100 / mainCols.length + '%');
+};
 
 
-var refreshPage = function refreshPage() {
-    var table = $('table.dwm_main');
-    <?php
-    // Allow refreshing if we're on a metered connection and in kiosk
-    // mode, because kiosk mode relies on regular refreshing.
-    ?>
-    if (!isHidden() &&
-        !table.hasClass('resizing') &&
-        (args.kiosk || !isMeteredConnection()) &&
-        !refreshPage.disabled)
+const refreshPage = function refreshPage() {
+
+  <?php // Check whether the properties of subset match those of superset ?>
+  const hasMatchingSubset = function(superset, subset) {
+    for (const property in subset)
     {
-      var url = 'index.php';
-
-      var data = {
-        refresh: 1,
-        view: args.view,
-        view_all: args.view_all,
-        page_date: args.pageDate,
-        area: args.area,
-        room: args.room
-      };
-
-      if (args.timetohighlight !== undefined)
+      // We only want a weak equality test as some of the properties will have different types
+      // noinspection EqualityComparisonWithCoercionJS
+      if (superset[property] != subset[property])
       {
-        data.timetohighlight = args.timetohighlight;
-      }
-
-      <?php
-      // Add a class of 'refreshable' to the table so that we know when the response comes
-      // back whether we can use it to refresh the table.   The problem is that it is
-      // possible - especially on slow connections - that in between the Ajax request being
-      // made and the response being returned, the user could have moved to a different day,
-      // which is just done by replacing the page body element.  In that case the refresh would
-      // come back and refresh the table with the wrong day's data.  By adding the 'refreshable'
-      // class to the table we ensure that this can't happen, because if the user moves to a
-      // different day the new HTML won't have the class.
-      ?>
-      table.addClass('refreshable');
-
-      if(args.site)
-      {
-        data.site = args.site;
-      }
-
-      // If we're in kiosk mode add the kiosk parameter in the query string rather than as a POST
-      // parameter to avoid an unnecessary redirection by the server (the server checks for a kiosk
-      // in the query string and, if not found, will redirect to the kiosk URL).
-      if (args.kiosk !== undefined)
-      {
-        url += '?kiosk=' + args.kiosk;
-      }
-
-      return $.post(
-           url,
-           data,
-           function(result){
-               <?php
-               // (1) Empty the existing table in order to get rid of events
-               // and data and prevent memory leaks, (2) insert the updated
-               // table HTML, (3) clear the existing interval timer and then
-               // (4) trigger a load event so that the resizable bookings are
-               // re-created and a new timer started.
-               ?>
-               if (result && !isHidden() && !refreshPage.disabled)
-               {
-                 var table = $('table.dwm_main');
-                 if (!table.hasClass('resizing') && table.hasClass('refreshable'))
-                 {
-                   var dateHeading = $('.date_heading');
-                   dateHeading.empty().html(result.date_heading);
-                   table.empty().html(result.inner_html);
-                   window.clearInterval(intervalId);
-                   intervalId = undefined;
-                   table.trigger('tableload');
-                 }
-               }
-             },
-           'json'
-        );
-    }  <?php // if (!isHidden() etc.?>
-  };
-
-
-
-
-var refreshVisChanged = function refreshVisChanged() {
-    var pageHidden = isHidden();
-
-    if (pageHidden !== null)
-    {
-       <?php
-      // Stop the interval timer.  If the page is now visible then refresh
-      // the page, which will also start a new timer.   We clear the interval
-      // and refresh the page rather than just disabling/enabling the page
-      // refresh because we want the latest data to be displayed immediately the
-      // page becomes visible again.  (It might have been hidden for a while
-      // with lots of changes in the meantime).
-      ?>
-      if (typeof intervalId !== 'undefined')
-      {
-        window.clearInterval(intervalId);
-        intervalId = undefined;
-      }
-      <?php
-      // If the page is now visible then refresh the page and, once that has been
-      // done, refresh the prefetched pages.  Don't initiate the prefetch refresh
-      // until after the main refresh is complete because simultaneous Ajax requests
-      // will cause problems if the inactivity timeout has been exceeded and the
-      // user is logged off as a result: the server code will try and log the user
-      // off each time resulting in session_destroy() throwing an error.
-      ?>
-      if (!pageHidden)
-      {
-        const refreshedPage = refreshPage();
-        if (undefined !== refreshedPage)
-        {
-          refreshedPage.done(function() {
-            prefetch();
-          });
-        }
+        return false;
       }
     }
+    return true;
   };
 
+  const table = $('table.dwm_main');
+  refreshPage.timeoutRunning = false;
 
-var Timeline = {
+  <?php
+  // Some reasons we may not want to refresh.  Note that we allow refreshing if we're on a
+  // metered connection and in kiosk mode, because kiosk mode relies on regular refreshing.
+  ?>
+  if (refreshPage.inProgress ||
+      isHidden() ||
+      table.hasClass('resizing') ||
+      (!args.kiosk && isMeteredConnection()) ||
+      refreshPage.disabled)
+  {
+    return;
+  }
+
+  let url = 'index.php';
+
+  const data = {
+    refresh: 1,
+    view: args.view,
+    view_all: args.view_all,
+    page_date: args.pageDate,
+    area: args.area,
+    room: args.room
+  };
+
+  if (args.timetohighlight !== undefined)
+  {
+    data.timetohighlight = args.timetohighlight;
+  }
+
+  if (args.site)
+  {
+    data.site = args.site;
+  }
+
+  // If we're in kiosk mode add the kiosk parameter in the query string rather than as a POST
+  // parameter to avoid an unnecessary redirection by the server (the server checks for a kiosk
+  // in the query string and, if not found, will redirect to the kiosk URL).
+  if (args.kiosk !== undefined)
+  {
+    url += '?kiosk=' + args.kiosk;
+  }
+
+  refreshPage.inProgress = true;
+  return $.post(
+    url,
+    data,
+    function (result) {
+      <?php
+      // (1) Empty the existing table in order to get rid of events and data and prevent
+      // memory leaks; (2) insert the updated table HTML; and then (3) trigger a tableload
+      // event so that the resizable bookings are re-created and a new timeout started.
+      ?>
+      refreshPage.inProgress = false;
+      if (result && !isHidden() && !refreshPage.disabled)
+      {
+        // Check, using hasMatchingSubset, that the data that has been returned by the server
+        // is for the page that is currently being displayed, in case the user has navigated
+        // to a different page since the Ajax request was initiated.
+        if (!table.hasClass('resizing') && hasMatchingSubset(args, result.context))
+        {
+          $('.date_heading').empty().html(result.date_heading);
+          table.empty().html(result.inner_html).trigger('tableload');
+        }
+      }
+    },
+    'json'
+  );
+};
+
+
+const refreshVisChanged = function refreshVisChanged() {
+  const pageHidden = isHidden();
+
+  if (pageHidden !== null)
+  {
+    <?php
+    // If the page is now visible then refresh the page to get the latest data and, once that has been
+    // done, refresh the prefetched pages.  Don't initiate the prefetch refresh until after the main
+    // refresh is complete because simultaneous Ajax requests will cause problems if the inactivity
+    // timeout has been exceeded and the user is logged off as a result: the server code will try and
+    // log the user off each time resulting in session_destroy() throwing an error.
+    ?>
+    if (!pageHidden) {
+      const refreshedPage = refreshPage();
+      if (undefined !== refreshedPage)
+      {
+        refreshedPage.done(function () {
+          prefetch();
+        });
+      }
+    }
+  }
+};
+
+
+const Timeline = {
   timerRunning: null,
 
   <?php // Clear the timeline and any associated timers ?>
@@ -212,33 +199,33 @@ var Timeline = {
   // better to get the size of the slot that contains the timeline.
   ?>
   getFirstNonZeroSlotSize: function() {
-    var slotSize;
-    var table = $('#day_main');
+    let slotSize;
+    const table = $('#day_main');
 
     <?php
     if ($times_along_top)
     {
       ?>
       table.find('thead th').not('.first_last').each(function () {
-          slotSize = $(this).outerWidth();
-          if (slotSize)
-          {
-            return false;
-          }
-        });
-    <?php
+        slotSize = $(this).outerWidth();
+        if (slotSize)
+        {
+          return false;
+        }
+      });
+      <?php
     }
     else
     {
       ?>
       table.find('tbody tr').each(function () {
-          slotSize = $(this).outerHeight();
-          if (slotSize)
-          {
-            return false;
-          }
-        });
-    <?php
+        slotSize = $(this).outerHeight();
+        if (slotSize)
+        {
+          return false;
+        }
+      });
+      <?php
     }
     ?>
     return slotSize;
@@ -251,6 +238,8 @@ var Timeline = {
   // time defaults to the current time.
   ?>
   search: function(slots, time) {
+    let result = [];
+
     <?php
     // Tests whether the time is definitely with the interval defined by the beginning of the first slot
     // and the end of the last slot.
@@ -289,8 +278,8 @@ var Timeline = {
     // interval but not within any individual element, because time is outside the booking day.
     ?>
     function getIndices(slots, time) {
-      var element;
-      for (var i=slots.length - 1; i>=0; i--) {
+      let element;
+      for (let i=slots.length - 1; i>=0; i--) {
         element = slots[i];
         if (within(element, time))
         {
@@ -303,8 +292,6 @@ var Timeline = {
         }
       }
     }
-
-    var result = [];
 
     if ((typeof time === 'undefined'))
     {
@@ -330,24 +317,24 @@ var Timeline = {
     <?php // Remove any existing timeline ?>
     $('.timeline').remove();
 
-    var now = Math.floor(Date.now() / 1000);
-    var table = $('.dwm_main');
-    var container = table.parent();
-    var thead = table.find('thead');
-    var slots = thead.data('slots');
-    var timelineVertical = thead.data('timeline-vertical');
-    var timelineFull = thead.data('timeline-full');
-    var nowSlotIndices, slot, fraction, row, element;
-    var slotSize, delay, timeline;
-    var top, left, borderLeftWidth, borderRightWidth, width, height;
-    var headers, headersFirstLast, headersNormal, headerFirstSize, headerLastSize;
+    const now = Math.floor(Date.now() / 1000);
+    const table = $('.dwm_main');
+    const container = table.parent();
+    const thead = table.find('thead');
+    const slots = thead.data('slots');
+    const timelineVertical = thead.data('timeline-vertical');
+    const timelineFull = thead.data('timeline-full');
+    let nowSlotIndices, slot, fraction, row, element;
+    let slotSize, delay, timeline;
+    let top, left, borderLeftWidth, borderRightWidth, width, height;
+    let headers, headersFirstLast, headersNormal, headerFirstSize, headerLastSize;
 
     nowSlotIndices = Timeline.search(slots);
 
     if (nowSlotIndices.length > 1)
     {
       slot = slots;
-      for (var i=nowSlotIndices.length - 1; i>=0; i--)
+      for (let i=nowSlotIndices.length - 1; i>=0; i--)
       {
         slot = slot[nowSlotIndices[i]];
       }
@@ -385,7 +372,7 @@ var Timeline = {
 
         if (timelineFull)
         {
-          var tbody = table.find('tbody');
+          const tbody = table.find('tbody');
           top = tbody.offset().top - container.offset().top;
           height = tbody.height();
         }
@@ -504,7 +491,7 @@ var Timeline = {
 
 $(document).on('page_ready', function() {
 
-  var table = $('table.dwm_main');
+  const table = $('table.dwm_main');
   Timeline.clear();
 
   <?php
@@ -515,90 +502,88 @@ $(document).on('page_ready', function() {
   ?>
   table.on('tableload', function() {
 
-      var refreshRate;
+    let refreshRate;
 
-      sizeColumns();
+    sizeColumns();
 
-      if (args.kiosk)
-      {
-        refreshRate = <?php echo $kiosk_refresh_rate ?? 0; ?>;
-      }
-      else
-      {
-        refreshRate = <?php echo $refresh_rate ?? 0; ?>;
-      }
+    if (args.kiosk)
+    {
+      refreshRate = <?php echo $kiosk_refresh_rate ?? 0; ?>;
+    }
+    else
+    {
+      refreshRate = <?php echo $refresh_rate ?? 0; ?>;
+    }
 
-      if (refreshRate !== 0)
-      {
-
-        <?php
-        // Set an interval timer to refresh the page, unless there's already one in place
-        ?>
-        if (typeof intervalId === 'undefined')
-        {
-          intervalId = setInterval(refreshPage, refreshRate * 1000);
-        }
-      }
-
+    if ((refreshRate !== 0) && !refreshPage.timeoutRunning)
+    {
       <?php
-      // Add an event listener to detect a change in the visibility
-      // state.  We can then suspend Ajax refreshing when the page is
-      // hidden to save on server, client and network load.
-
-      // We also need to resume refreshing and refresh the pre-fetched
-      // pages when the page becomes visible again.
+      // Set a timeout to refresh the page.  When the refresh completes another tableload,
+      // and hence another timeout, will be triggered.
       ?>
-      var prefix = visibilityPrefix();
-      if (document.addEventListener &&
-          (prefix !== null) &&
-          !refreshListenerAdded)
-      {
-        document.addEventListener(prefix + "visibilitychange", refreshVisChanged);
-        refreshListenerAdded = true;
-      }
+      setTimeout(refreshPage, refreshRate * 1000);
+      refreshPage.timeoutRunning = true;
+    }
 
-      <?php
-      if (!$enable_periods)
+    <?php
+    // Add an event listener to detect a change in the visibility
+    // state.  We can then suspend Ajax refreshing when the page is
+    // hidden to save on server, client and network load.
+
+    // We also need to resume refreshing and refresh the pre-fetched
+    // pages when the page becomes visible again.
+    ?>
+    const prefix = visibilityPrefix();
+    if (document.addEventListener &&
+        (prefix !== null) &&
+        !refreshListenerAdded)
+    {
+      document.addEventListener(prefix + "visibilitychange", refreshVisChanged);
+      refreshListenerAdded = true;
+    }
+
+    <?php
+    if (!$enable_periods)
+    {
+      // If required, add a timeline showing the current time. Also need to recalculate
+      //the timeline if the window is resized.
+      ?>
+      if ((args.kiosk && <?php echo ($show_timeline_kiosk) ? 'true' : 'false'?>) ||
+          (!args.kiosk && <?php echo($show_timeline) ? 'true' : 'false'?>))
       {
-        // If required, add a timeline showing the current time. Also need to recalculate
-        //the timeline if the window is resized.
-        ?>
-        if ((args.kiosk && <?php echo ($show_timeline_kiosk) ? 'true' : 'false'?>) ||
-            (!args.kiosk && <?php echo($show_timeline) ? 'true' : 'false'?>))
-        {
+        Timeline.show();
+        $(window).on('resize', function () {
           Timeline.show();
-          $(window).on('resize', function () {
-            Timeline.show();
-          });
-        }
-        <?php
+        });
       }
-      ?>
-
       <?php
-      // If we've got a second row in the header then we need to set the 'top' for each of
-      // its cells so that sticky headers work properly.
-      // Notes:
-      //   1. We set the top of the second row to be the bottom of the top row.  This is to avoid
-      //      a problem when the page is refreshed.
-      //   2. It would be simpler just to make the thead sticky, but that's not supported in all browsers.
-      ?>
-      var bottom = $('.dwm_main thead tr:first th:first').outerHeight();
-      $('.dwm_main thead tr:nth-child(2) th').css('top', bottom + 'px');
+    }
+    ?>
 
-      <?php
-      // Highlight the column header cells in the table and foot.
-      // TODO: this only works when the mouse is moved; the highlighting is lost when the
-      // TODO: page is automatically refreshed.
-      ?>
-      $('table.all_rooms td').on('mouseenter mouseleave', function(event) {
-        $('table.all_rooms')
-          .find('thead, tfoot')
-          .find('th:nth-child(' + ($(this).index() + 1) + ')')
-          .toggleClass('highlight', (event.type === 'mouseenter'));
-      });
+    <?php
+    // If we've got a second row in the header then we need to set the 'top' for each of
+    // its cells so that sticky headers work properly.
+    // Notes:
+    //   1. We set the top of the second row to be the bottom of the top row.  This is to avoid
+    //      a problem when the page is refreshed.
+    //   2. It would be simpler just to make the thead sticky, but that's not supported in all browsers.
+    ?>
+    const bottom = $('.dwm_main thead tr:first th:first').outerHeight();
+    $('.dwm_main thead tr:nth-child(2) th').css('top', bottom + 'px');
 
-    }).trigger('tableload');
+    <?php
+    // Highlight the column header cells in the table and foot.
+    // TODO: this only works when the mouse is moved; the highlighting is lost when the
+    // TODO: page is automatically refreshed.
+    ?>
+    $('table.all_rooms td').on('mouseenter mouseleave', function(event) {
+      $('table.all_rooms')
+        .find('thead, tfoot')
+        .find('th:nth-child(' + ($(this).index() + 1) + ')')
+        .toggleClass('highlight', (event.type === 'mouseenter'));
+    });
+
+  }).trigger('tableload');
 
   <?php
   // If the table exists and we've been given scroll positions in the URL query string, scroll to them so that we go

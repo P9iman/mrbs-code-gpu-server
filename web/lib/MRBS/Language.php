@@ -46,6 +46,28 @@ class Language
   /**
    * Maps the non-standard language tag used in the filename onto the BCP 47 standard
    */
+  private const LANG_MAP_DATATABLES = [
+    'az-AZ' => 'az',  // No 'az' file is provided
+    'bs-BA' => 'bs',  // No 'bs' file is provided
+    'de-DE' => 'de',  // No 'de' file is provided
+    'es-ES' => 'es',  // No 'es' file is provided
+    'fr-FR' => 'fr',  // No 'fr' file is provided
+    'Ganda' => 'lg',
+    'it-IT' => 'it',  // No 'it' file is provided
+    'nl-NN' => 'nl',  // No 'nl' file is provided
+    'no-NB' => 'nb',  // Naming wrong
+    'no-NO' => 'nn',  // Naming wrong
+    'pt-PT' => 'pt',  // No 'pt' file is provided
+    'snd' => 'sd',    // Naming wrong
+    'sr-SP' => 'sr-Latn',  // Naming wrong
+    'sv-SE' => 'sv',  // No 'sv' file is provided
+    'uz-CR' => 'uz-Cyrl',  // Naming wrong
+    'zh-HANT' => 'zh-Hant'  // Naming wrong
+  ];
+
+  /**
+   * Maps the non-standard language tag used in the filename onto the BCP 47 standard
+   */
   private const LANG_MAP_FLATPICKR = [
     'at'      => 'de-at',
     'cat'     => 'ca',
@@ -93,6 +115,7 @@ class Language
     'datatables' => [
       'dir' => 'jquery/datatables/language',
       'suffix' => '.json',
+      'lang_map' => self::LANG_MAP_DATATABLES,
       'defaults' => ['en']
     ],
     'flatpickr' => [
@@ -422,14 +445,14 @@ class Language
   /**
    * Gets the vocab string for a given tag and locale.
    *
+   * The string can be an intl MessageFormatter pattern, or a string that can be formatted using sprintf().
+   *
+   * @param bool $raw If true, return the raw vocab string without value substitution.
    * @param mixed ...$values Optional values to be inserted into the string, as for sprintf()
    * @return string The vocab string, or the tag itself if there is no string.
    */
-  public function getVocab(string $tag, string $locale, ...$values) : string
+  public function getVocab(string $tag, string $locale, bool $raw=false, ...$values) : string
   {
-    //  Maybe in the future we should switch to using the MessageFormatter
-    //  class as it is more powerful.   However, the Intl extension isn't present
-    //  in all PHP installations and so the class would have to be emulated.
     static $vocab;
 
     if (!isset($vocab[$locale]))
@@ -440,10 +463,30 @@ class Language
     // Return the tag itself if we can't find a vocab string
     if (!isset($vocab[$locale][$tag]))
     {
-      return $tag;
+      // Vocab strings are trusted as they are supplied by the site, but tags cannot be trusted, so escape them here.
+      return escape_html($tag);
     }
 
-    return (count($values) === 0) ? $vocab[$locale][$tag] : sprintf($vocab[$locale][$tag], ...$values);
+    if ($raw)
+    {
+      return $vocab[$locale][$tag];
+    }
+
+    // If the vocab string looks like an intl MessageFormatter pattern, use MessageFormatter to format it.
+    if (preg_match('/{.*}/', $vocab[$locale][$tag]))
+    {
+      $message_formatter = new \MessageFormatter($locale, $vocab[$locale][$tag]);
+      return $message_formatter->format($values);
+    }
+
+    // Or if there are values to insert, use sprintf to format the string.
+    if (count($values) > 0)
+    {
+      return sprintf($vocab[$locale][$tag], ...$values);
+    }
+
+    // Otherwise, return the vocab string as-is.
+    return $vocab[$locale][$tag];
   }
 
 

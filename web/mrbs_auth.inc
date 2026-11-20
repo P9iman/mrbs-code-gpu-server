@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace MRBS;
 
 use MRBS\Auth\AuthFactory;
+use MRBS\Form\Form;
 use MRBS\Session\Session;
 use MRBS\Session\SessionFactory;
 
@@ -198,25 +199,47 @@ function checkAuthorised($page, $just_check=false)
 {
   global $view, $view_all, $year, $month, $day, $area, $room;
   global $returl;
+  global $auth;
 
   // Get the minimum authorisation level for this page
   $required_level = get_page_level($page);
 
   if ($just_check)
   {
-    if ($required_level == 0)
-    {
-      return true;
+    if ($required_level == 0) {
+      $result = true;
     }
-
-    $mrbs_user = session()->getCurrentUser();
-    return (isset($mrbs_user) && ($mrbs_user->level >= $required_level));
+    else
+    {
+      $mrbs_user = session()->getCurrentUser();
+      $result = (isset($mrbs_user) && ($mrbs_user->level >= $required_level));
+    }
   }
 
   // Check that the user has this level
-  if (getAuthorised($required_level, $returl))
+  elseif (getAuthorised($required_level, $returl))
   {
-    return true;
+    $result = true;
+  }
+
+  // We don't need to change the session data after this point, apart from needing to get a CSRF token if we haven't
+  // already got one (this will be the case if we are using a session scheme that doesn't require a login form).
+  // Therefore get a CSRF token and close the session so that the lock is released.  We will still be able to read the
+  // session data.
+  if (session_status() === PHP_SESSION_ACTIVE)
+  {
+    Form::getToken();
+    // Closing the session if we're running Joomla leads to problems (eg CSRF token not stored)/
+    // TODO: need to rethink this
+    if ($auth['session'] != 'joomla')
+    {
+      session_write_close();
+    }
+  }
+
+  if (isset($result))
+  {
+    return $result;
   }
 
   // If we don't know the right date then use today's
@@ -366,26 +389,36 @@ function is_admin() : bool
 }
 
 
-// Checks whether the current user has booking administration rights
-// for $rooms - ie is allowed to modify and delete other people's bookings
-// and to approve bookings.
-//
-// $rooms can be either a single scalar value or an array of room ids.  The default
-// value for $rooms is all rooms.  (At the moment $room is ignored, but is passed here
-// so that later MRBS can be enhanced to provide fine-grained permissions.)
-//
-// $all specifies whether the user must be a booking for all $rooms, or just some of
-// them, ie at least one.
-//
-// Returns:  TRUE if the user is allowed has booking admin rights for
-//           the room(s); otherwise FALSE
-function is_book_admin($rooms=null, $all=true) : bool
+/**
+ * Check whether the current user has booking administration rights for `$rooms`, ie is allowed to modify and delete
+ * other people's bookings and to approve bookings.
+ *
+ * Note that at the moment $rooms is ignored, but is passed here so that MRBS can be modified to provide fine-grained
+ * permissions.
+ *
+ * @param $rooms null|int|int[] Can be either a single scalar value or an array of room ids.  The default value is all
+ * rooms.
+ * @param bool $all Whether the user has to be a booking admin for all `$rooms` (`true`), or just at least one of them
+ * (`false`)
+ * @return bool
+ */
+function is_book_admin($rooms=null, bool $all=true) : bool
 {
   global $min_booking_admin_level;
 
-  if (is_array($rooms) && (count($rooms) > 0))
+  // Admins are always booking admins
+  if (is_admin())
   {
-    if ($all)
+    return true;
+  }
+
+  if (is_array($rooms))
+  {
+    if (count($rooms) == 0)
+    {
+      return false;
+    }
+    elseif ($all)
     {
       // We want the user to be a booking admin for all the rooms,
       // so if for any one room they are not, then return false.

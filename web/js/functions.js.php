@@ -5,31 +5,22 @@ namespace MRBS;
 require "../defaultincludes.inc";
 
 http_headers(array("Content-type: application/x-javascript"),
-             60*30);  // 30 minute expiry
+             60*30);  // 30-minute expiry
 ?>
 
 'use strict';
 
-// Decodes a base64 encoded string.  Returns false if it can't be decoded.
+// Decode a base64 encoded string.  Returns false if it can't be decoded.
 // See https://stackoverflow.com/questions/30106476/using-javascripts-atob-to-decode-base64-doesnt-properly-decode-utf-8-strings
 function base64Decode(string)
 {
-  if (typeof TextDecoder === "undefined")
+  if ((typeof TextDecoder === 'undefined') || (typeof Uint8Array.fromBase64 === 'undefined'))
   {
+    console.debug("MRBS: base64Decode() failed because this browser does not support both TextDecoder and Uint8Array.fromBase64");
     return false;
   }
-  <?php
-  // We can use const and let here because it's only IE and Opera Mini that
-  // don't support them and neither of them support TextDecoder.
-  ?>
-  const text = atob(string);
-  const length = text.length;
-  const bytes = new Uint8Array(length);
-  for (let i = 0; i < length; i++) {
-    bytes[i] = text.charCodeAt(i);
-  }
-  const decoder = new TextDecoder(); // default is utf-8
-  return decoder.decode(bytes);
+
+  return new TextDecoder().decode(Uint8Array.fromBase64(string));
 }
 
 <?php
@@ -52,6 +43,31 @@ function isIos()
 function isMobile()
 {
   return (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isIos());
+}
+
+<?php
+// Return the string from the object pluralStrings corresponding to the category, which is the result of
+// Intl.PluralRules.select(), ie one of 'zero', 'one', 'two', 'few', 'many', 'other'.  If the category doesn't
+// exist then use 'other' ('other' must exist otherwise PHP's MessageFormatter will generate a warning).
+?>
+function pluralString(pluralStrings, category)
+{
+  if (category !== 'other')
+  {
+    if (category in pluralStrings)
+    {
+      return pluralStrings[category];
+    }
+    console.info("MRBS pluralString: category '" + category + "' not found in " + JSON.stringify(pluralStrings) + "; using 'other'.");
+  }
+
+  if ('other' in pluralStrings)
+  {
+    return pluralStrings['other'];
+  }
+
+  console.warn("MRBS pluralString: category 'other' not found in " + JSON.stringify(pluralStrings) + "; returning empty string.");
+  return '';
 }
 
 $.fn.reverse = [].reverse;
@@ -96,9 +112,9 @@ jQuery.fn.extend({
           ?>
         })
         .next('.select2-container').each(function() {
-            var container = $(this);
-            container.width(container.width() + 5);
-          });
+          const container = $(this);
+          container.width(container.width() + 5);
+        });
     }
     return($(this));
   }
@@ -115,19 +131,18 @@ function getMaxWidth (selection) {
 
 function getErrorList(errors)
 {
-  var result = {html: '', text: ''},
-      patternSpan = /<span[\s\S]*span>/gi,
-      patternTags = /<\S[^><]*>/g,
-      str;
+  const result = {html: '', text: ''};
+  const patternSpan = /<span[\s\S]*span>/gi;
+  const patternTags = /<\S[^><]*>/g;
 
   result.html += "<ul>";
 
-  for (var i=0; i<errors.length; i++)
+  for (let i=0; i<errors.length; i++)
   {
     result.html += "<li>" + errors[i] + "<\/li>";
     result.text += '(' + (i+1).toString() + ') ';
     <?php // strip out the <span> and its contents and then all other tags ?>
-    str = errors[i].replace(patternSpan, '').replace(patternTags, '');
+    let str = errors[i].replace(patternSpan, '').replace(patternTags, '');
     <?php // undo the htmlspecialchars() ?>
     result.text += $('<div>').html(str).text();
     result.text += "  \n";
@@ -143,48 +158,45 @@ function getErrorList(errors)
 // Gets the correct prefix to use (if any) with the page visibility API.
 // Returns null if not supported.
 ?>
-var visibilityPrefix = function visibilityPrefix() {
-    var prefixes = ['', 'webkit', 'moz', 'ms', 'o'];
-    var testProperty;
+const visibilityPrefix = function visibilityPrefix() {
+  const prefixes = ['', 'webkit', 'moz', 'ms', 'o'];
 
-    if (typeof visibilityPrefix.prefix === 'undefined')
+  if (typeof visibilityPrefix.prefix === 'undefined')
+  {
+    visibilityPrefix.prefix = null;
+    for (const prefix of prefixes)
     {
-      visibilityPrefix.prefix = null;
-      for (var i=0; i<prefixes.length; i++)
+      let testProperty = prefix;
+      testProperty += (prefix === '') ? 'hidden' : 'Hidden';
+      if (testProperty in document)
       {
-        testProperty = prefixes[i];
-        testProperty += (prefixes[i] === '') ? 'hidden' : 'Hidden';
-        if (testProperty in document)
-        {
-          visibilityPrefix.prefix = prefixes[i];
-          break;
-        }
+        visibilityPrefix.prefix = prefix;
+        break;
       }
     }
+  }
 
-    return visibilityPrefix.prefix;
-  };
+  return visibilityPrefix.prefix;
+};
 
 <?php
 // Determine if the page is hidden from the user (eg if it has been minimised
 // or the tab is not visible).    Returns true, false or null (if not known).
 ?>
-var isHidden = function isHidden() {
-    var prefix;
-    prefix = visibilityPrefix();
-    switch (prefix)
-    {
-      case null:
-        return null;
-        break;
-      case '':
-        return document.hidden;
-        break;
-      default:
-        return document[prefix + 'Hidden'];
-        break;
-    }
-  };
+const isHidden = function isHidden() {
+  const prefix = visibilityPrefix();
+  switch (prefix) {
+    case null:
+      return null;
+      break;
+    case '':
+      return document.hidden;
+      break;
+    default:
+      return document[prefix + 'Hidden'];
+      break;
+  }
+};
 
 
 <?php
@@ -192,24 +204,23 @@ var isHidden = function isHidden() {
 ?>
 function throttle(fn, threshold, scope) {
 
-  var last,
-      deferTimer;
+  let last, deferTimer;
 
   threshold || (threshold = 250);
 
   return function () {
-    var context = scope || this,
-        now = +new Date(),
-        args = arguments;
+    const context = scope || this;
+    const now = +new Date();
+    const args = arguments;
 
     if (last && now < last + threshold)
     {
       // hold on to it
       clearTimeout(deferTimer);
       deferTimer = setTimeout(function () {
-          last = now;
-          fn.apply(context, args);
-        }, threshold);
+        last = now;
+        fn.apply(context, args);
+      }, threshold);
     }
     else
     {
@@ -225,11 +236,11 @@ function throttle(fn, threshold, scope) {
 ?>
 function isMeteredConnection()
 {
-  var connection = navigator.connection ||
-                   navigator.mozConnection ||
-                   navigator.webkitConnection ||
-                   navigator.msConnection ||
-                   null;
+  const connection = navigator.connection ||
+    navigator.mozConnection ||
+    navigator.webkitConnection ||
+    navigator.msConnection ||
+    null;
 
   if (connection === null)
   {
@@ -260,28 +271,6 @@ function isMeteredConnection()
 function getCSRFToken()
 {
   return $('meta[name="csrf_token"]').attr('content');
-}
-
-
-<?php
-// Get a query string parameter from a url
-// See https://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript
-?>
-function getParameterByName(name, url)
-{
-  if (!url)
-  {
-    url = window.location.href;
-  }
-  name = name.replace(/[\[\]]/g, "\\$&");
-  var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-      results = regex.exec(url);
-  if (!results) return null;
-  if (!results[2])
-  {
-    return '';
-  }
-  return decodeURIComponent(results[2].replace(/\+/g, " "));
 }
 
 
@@ -372,7 +361,7 @@ function getParameterByName(name, url)
 
 // https://github.com/mgalante/jquery.redirect
 /*
-jQuery Redirect v1.1.4
+jQuery Redirect v1.2.0
 
 Copyright (c) 2013-2022 Miguel Galante
 Copyright (c) 2011-2013 Nemanja Avramovic, www.avramovic.info
@@ -398,7 +387,8 @@ ShareAlike - If you remix, transform, or build upon the material, you must distr
     method: 'POST',
     target: null,
     traditional: false,
-    redirectTop: false
+    redirectTop: false,
+    shouldKeepBlankFields: false
   };
 
   /**
@@ -409,6 +399,7 @@ ShareAlike - If you remix, transform, or build upon the material, you must distr
    * @param {string} target - (optional) The target of the form. "_blank" will open the url in a new window.
    * @param {boolean} traditional - (optional) This provides the same function as jquery's ajax function. The brackets are omitted on the field name if its an array.  This allows arrays to work with MVC.net among others.
    * @param {boolean} redirectTop - (optional) If its called from a iframe, force to navigate the top window.
+   * @param {boolean} shouldKeepBlankFields - (optional) If shouldKeepBlankFields is false, blank fields will be removed.
    *//**
    * jQuery Redirect
    * @param {string} opts - Options object
@@ -418,9 +409,10 @@ ShareAlike - If you remix, transform, or build upon the material, you must distr
    * @param {string} opts.target - (optional) The target of the form. "_blank" will open the url in a new window.
    * @param {boolean} opts.traditional - (optional) This provides the same function as jquery's ajax function. The brackets are omitted on the field name if its an array.  This allows arrays to work with MVC.net among others.
    * @param {boolean} opts.redirectTop - (optional) If its called from a iframe, force to navigate the top window.
+   * @param {boolean} opts.shouldKeepBlankFields - (optional) If shouldKeepBlankFields is false, blank fields will be removed.
    */
 
-  $.redirect = function (url, values, method, target, traditional, redirectTop) {
+  $.redirect = function (url, values, method, target, traditional, redirectTop, shouldKeepBlankFields) {
     var opts = url;
     if (typeof url !== 'object') {
       opts = {
@@ -429,18 +421,19 @@ ShareAlike - If you remix, transform, or build upon the material, you must distr
         method: method,
         target: target,
         traditional: traditional,
-        redirectTop: redirectTop
+        redirectTop: redirectTop,
+        shouldKeepBlankFields: shouldKeepBlankFields
       };
     }
 
     var config = $.extend({}, defaults, opts);
-    var generatedForm = $.redirect.getForm(config.url, config.values, config.method, config.target, config.traditional);
+    var generatedForm = $.redirect.getForm(config.url, config.values, config.method, config.target, config.traditional, config.shouldKeepBlankFields);
     $('body', config.redirectTop ? window.top.document : undefined).append(generatedForm.form);
     generatedForm.submit();
     generatedForm.form.remove();
   };
 
-  $.redirect.getForm = function (url, values, method, target, traditional) {
+  $.redirect.getForm = function (url, values, method, target, traditional, shouldKeepBlankFields) {
     method = (method && ['GET', 'POST', 'PUT', 'DELETE'].indexOf(method.toUpperCase()) !== -1) ? method.toUpperCase() : 'POST';
 
     url = url.split('#');
@@ -453,7 +446,7 @@ ShareAlike - If you remix, transform, or build upon the material, you must distr
       values = obj.params;
     }
 
-    values = removeNulls(values);
+    values = removeNulls(values, shouldKeepBlankFields);
 
     var form = $('<form>')
       .attr('method', method)
@@ -540,15 +533,15 @@ ShareAlike - If you remix, transform, or build upon the material, you must distr
     });
   };
 
-  var removeNulls = function (values) {
+  var removeNulls = function (values, shouldKeepBlankFields) {
     var propNames = Object.getOwnPropertyNames(values);
     for (var i = 0; i < propNames.length; i++) {
       var propName = propNames[i];
       if (values[propName] === null || values[propName] === undefined) {
         delete values[propName];
       } else if (typeof values[propName] === 'object') {
-        values[propName] = removeNulls(values[propName]);
-      } else if (values[propName].length < 1) {
+        values[propName] = removeNulls(values[propName], shouldKeepBlankFields);
+      } else if (!shouldKeepBlankFields && values[propName].length < 1) {
         delete values[propName];
       }
     }

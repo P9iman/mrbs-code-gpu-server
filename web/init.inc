@@ -2,9 +2,74 @@
 declare(strict_types=1);
 namespace MRBS;
 
-// Site-specific php.ini settings
 use MRBS\Errors\Errors;
 
+/**
+ * Returns the base URL for MRBS.  If the config variable $url_base is set, then that overrides the automatic
+ * calculation.  A '/' will be appended to the end of the string, unless it is empty or already ends in a '/'.
+ *
+ * IMPORTANT: this function must be initialised by calling it from a script at the top level of the MRBS web directory.
+ */
+function url_base() : string
+{
+  global $url_base, $server;
+
+  // Store the result in a static variable so that the function can be initialised by calling it from the top level.
+  static $result = null;
+
+  if (!isset($result))
+  {
+    // Use the $url_base if there is one and it is well-formed.
+    if (isset($url_base))
+    {
+      $parsed_url = parse_url($url_base);
+      if ($parsed_url === false)
+      {
+        trigger_error('Cannot parse $url_base of "' . $url_base . '"', E_USER_WARNING);
+      }
+    }
+
+    // Otherwise construct it from the $_SERVER variables if we can.
+    if (empty($parsed_url) && isset($server['HTTP_HOST']))
+    {
+      $parsed_url = [
+        'host' => $server['HTTP_HOST'],
+        'path' => dirname(url_path())
+      ];
+    }
+
+    // If we haven't got any URL parts, then return an empty string.
+    if (empty($parsed_url))
+    {
+      $result = '';
+    }
+    // Otherwise tidy up the URL parts and rebuild it.
+    else
+    {
+      // Add a scheme if we haven't got one
+      if (!isset($parsed_url['scheme']))
+      {
+        $parsed_url['scheme'] = is_https() ? 'https' : 'http';
+      }
+      // Remove any query and fragment (which shouldn't be there anyway, but just in case)
+      unset($parsed_url['query'], $parsed_url['fragment']);
+      // Rebuild the URL
+      $result = build_url($parsed_url);
+      // Add a trailing '/' if there isn't one already.
+      if (!str_ends_with($result, '/'))
+      {
+        $result .= '/';
+      }
+    }
+  }
+
+  return $result;
+}
+
+// Initialise url_base().
+url_base();
+
+// Site-specific php.ini settings
 if (!empty($ini_directives))
 {
   foreach ($ini_directives as $option => $value)
@@ -74,15 +139,24 @@ Language::getInstance()->init();
 // Flush the mail queue on shutdown
 register_shutdown_function(__NAMESPACE__ . "\\MailQueue::flush");
 
-// Check extensions
-if ((version_compare(PHP_VERSION, '8.1.0') >= 0) && !extension_loaded('intl'))
+// Check whether the 'intl' extension is loaded, and if not, warn the user.
+if (!extension_loaded('intl'))
 {
-  // We suppress deprecation messages each time we use strftime() in MRBS's emulation of the IntlDateFormatter
-  // class and just have a single message here, in order to avoid flooding the log with messages.
-  $message = "MRBS has detected that you do not have the PHP 'intl' extension loaded on your server and " .
-             "so it is using the deprecated strftime() function instead.  You are recommended to enable " .
-             "the 'intl' extension.";
-  trigger_error($message, E_USER_DEPRECATED);
+  if (version_compare(PHP_VERSION, '8.1') >= 0)
+  {
+    // We suppress deprecation messages each time we use strftime() in MRBS's emulation of the IntlDateFormatter
+    // class and just have a single message here, in order to avoid flooding the log with messages.
+    $deprecated_items = "strftime() function";
+    if (version_compare(PHP_VERSION, '8.6') >= 0)
+    {
+      // Ditto for the SORT_LOCALE_STRING constant in MRBS's emulation of the Collator class.
+      $deprecated_items .= " and SORT_LOCALE_STRING constant";
+    }
+    $message = "MRBS has detected that you do not have the PHP 'intl' extension loaded on your server and " .
+      "so it is using the deprecated $deprecated_items instead.  You are recommended to enable " .
+      "the 'intl' extension.";
+    trigger_error($message, E_USER_DEPRECATED);
+  }
 }
 
 if (method_exists(session(), 'processForm'))
@@ -92,9 +166,12 @@ if (method_exists(session(), 'processForm'))
 
 // If we're in kiosk mode make sure somebody's not trying to get to anywhere other than
 // index.php with a kiosk query string parameter, kiosk.php or one of the js/***.js.php pages.
-if (is_kiosk_mode() &&
-    !((isset($server['REQUEST_URI']) && preg_match('/index\.php\?.*kiosk=/', $server['REQUEST_URI'])) ||
-      (isset($server['SCRIPT_NAME']) && preg_match('/kiosk\.php$|js\/.+\.js\.php$/', $server['SCRIPT_NAME']) )))
+// [Save the is_kiosk_mode() test until last so that we avoid using sessions, unless absolutely necessary.  As sessions
+// are only started on some session types, eg Joomla, when the session variables are required, this improves loading
+// times for pages that don't need sessions, eg the *.js.php files.]
+if (!(isset($server['REQUEST_URI']) && preg_match('/index\.php\?.*kiosk=/', $server['REQUEST_URI'])) &&
+    !(isset($server['SCRIPT_NAME']) && preg_match('/kiosk\.php$|js\/.+\.js\.php$/', $server['SCRIPT_NAME'])) &&
+    is_kiosk_mode())
 {
   $location = (session()->isset('kiosk_url')) ? session()->get('kiosk_url') : "index.php?kiosk=$kiosk_default_mode";
   location_header(multisite($location));

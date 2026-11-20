@@ -55,15 +55,25 @@ $vocab["date"]               = "Ημερομηνία";
 $vocab["start_date"]         = "Ώρα έναρξης";
 $vocab["end_date"]           = "Ώρα λήξης";
 $vocab["time"]               = "Ώρα";
-$vocab["period"]             = "Period";
+$vocab["period_title"]       = "Period";
 $vocab["duration"]           = "Διάρκεια";
 $vocab["seconds"]            = "δευτερόλεπτα";
 $vocab["minutes"]            = "λεπτά";
 $vocab["hours"]              = "ώρες";
+$vocab["day"]                = "ημέρα";
 $vocab["days"]               = "ημέρες";
 $vocab["weeks"]              = "εβδομάδες";
 $vocab["years"]              = "χρόνια";
+$vocab["period"]             = "period";
 $vocab["periods"]            = "periods";
+$vocab["duration_seconds"]   = "{0, plural, one {# δευτερόλεπτο} other {# δευτερόλεπτα}}";
+$vocab["duration_minutes"]   = "{0, plural, one {# λεπτό} other {# λεπτά}}";
+$vocab["duration_hours"]     = "{0, plural, one {# ώρα} other {# ώρες}}";
+$vocab["duration_days"]      = "{0, plural, one {# ημέρα} other {# ημέρες}}";
+$vocab["duration_weeks"]     = "{0, plural, one {# εβδομάδα} other {# εβδομάδες}}";
+$vocab["duration_months"]    = "{0, plural, one {# μήνας} other {# μήνες}}";
+$vocab["duration_years"]     = "{0, plural, one {# έτος} other {# χρόνια}}";
+$vocab["duration_periods"]   = "{0, plural, one {# period} other {# periods}}";
 $vocab["all_day"]            = "Ολόκληρη μέρα";
 $vocab["type"]               = "Τύπος";
 $vocab["save"]               = "Αποθήκευση";
@@ -77,7 +87,7 @@ $vocab["rep_end_date"]       = "Ημερομηνία ολοκλήρωσης επ
 $vocab["rep_rep_day"]        = "Ημέρα επανάληψης";
 $vocab["ctrl_click"]         = "Χρησιμοποιήστε Control-Click για να επιλέξετε περισσότερες από μία αίθουσες";
 $vocab["entryid"]            = "Αναγνωριστικός αριθμός εγγραφής ";
-$vocab["repeat_id"]          = "Αναγνωριστικός αριθμός επανάληψης "; 
+$vocab["repeat_id"]          = "Αναγνωριστικός αριθμός επανάληψης ";
 $vocab["brief_description"]  = "Σύντομη Περιγραφή.";
 
 // Used in view_entry.php
@@ -98,7 +108,7 @@ $vocab["sched_conflict"]     = "Αντικρουόμενος Προγραμμα�
 $vocab["conflict"]           = "Η νέα κράτηση αντικρούει με τις ακόλουθες εγγραφές";
 $vocab["too_many_entries"]   = "Οι επιλογές θα δημιουργήσουν υπερβολικό αριθμό εγγραφών.<br>Παρακαλώ χρησιμοποιείστε διαφορετικές επιλογές!";
 $vocab["returncal"]          = "Επιστροφή σε προβολή ημερολογίου";
-$vocab["failed_to_acquire"]  = "Αποτυχία εξασφάλισης αποκλειστικής πρόσβασης στην βάση δεδομένων"; 
+$vocab["failed_to_acquire"]  = "Αποτυχία εξασφάλισης αποκλειστικής πρόσβασης στην βάση δεδομένων";
 
 // Authentication stuff
 $vocab["accessdenied"]       = "Απαγορεύεται η πρόσβαση";
